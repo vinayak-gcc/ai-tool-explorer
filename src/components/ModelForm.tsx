@@ -41,13 +41,47 @@ export default function ModelForm({ model, onGenerate, isLoading }: ModelFormPro
 
   const [images, setImages] = useState<string[]>([]);
   const [isEditingPrompt, setIsEditingPrompt] = useState<boolean>(false);
+  const [promptError, setPromptError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleInputChange = (key: string, value: ModelInputValue) =>
     setFormData(prev => ({ ...prev, [key]: value }));
 
+  const promptKey = Object.keys(model.inputs).find(key => 
+    key.toLowerCase().includes('prompt')
+  );
+
+  const validatePrompt = (prompt: string): string => {
+    if (!prompt || prompt.trim().length === 0) {
+      return 'Prompt cannot be empty';
+    }
+    if (prompt.length > 500) {
+      return 'Prompt cannot exceed 500 characters';
+    }
+    return '';
+  };
+
+  const handlePromptChange = (value: string) => {
+    if (promptKey) {
+      handleInputChange(promptKey, value);
+      const error = validatePrompt(value);
+      setPromptError(error);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate prompt before submission
+    if (promptKey) {
+      const promptValue = formData[promptKey] as string || '';
+      const error = validatePrompt(promptValue);
+      if (error) {
+        setPromptError(error);
+        return;
+      }
+    }
+
     const data: Record<string, ModelInputValue> = {};
     Object.entries(formData).forEach(([k, v]) => {
       if (v !== '' && v !== undefined && v !== null) data[k] = v;
@@ -170,9 +204,8 @@ export default function ModelForm({ model, onGenerate, isLoading }: ModelFormPro
     key.toLowerCase().includes('image')
   );
 
-  const promptKey = Object.keys(model.inputs).find(key => 
-    key.toLowerCase().includes('prompt')
-  );
+  const currentPrompt = (promptKey && formData[promptKey]) ? formData[promptKey] as string : '';
+  const isPromptValid = !promptError && currentPrompt.trim().length > 0;
 
   return (
     <form
@@ -293,44 +326,59 @@ export default function ModelForm({ model, onGenerate, isLoading }: ModelFormPro
   <div className='flex p-1.5 w-full items-center justify-center bg-[#0a0a0a] px-2 rounded-xl'>
     <div className='flex flex-col my-1 sm:flex-row sm:my-0 items-center w-full'>
    
-      <div className="flex w-4/5 max-w-[26.5rem] ">
+      <div className="flex flex-col w-4/5 max-w-[26.5rem]">
         {isEditingPrompt && promptKey ? (
-          <textarea
-            className="flex w-full max-w-[25rem] h-auto  px-3 py-2.5 bg-[#0a0a0a] text-white text-sm border-none focus:ring-0 focus:outline-none rounded-lg placeholder:text-white/60 resize-none min-h-[2.5rem] transition-all duration-200"
-            placeholder="Describe Your Scene"
-            disabled={isLoading}
-            value={formData[promptKey] as string || ''}
-            onChange={e => handleInputChange(promptKey, e.target.value)}
-            onBlur={() => setIsEditingPrompt(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                setIsEditingPrompt(false);
-              }
-              if (e.key === 'Escape') {
-                setIsEditingPrompt(false);
-              }
-            }}
-            rows={1}
-            autoFocus
-            style={{
-              overflow: 'hidden',
-              resize: 'none',
-            }}
-            onInput={(e) => {
-              // Auto-resize textarea
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-            }}
-          />
+          <div className="flex flex-col w-full">
+            <textarea
+              className={`flex w-full max-w-[25rem] h-auto px-3 py-2.5 bg-[#0a0a0a] text-white text-sm border-none focus:ring-0 focus:outline-none rounded-lg placeholder:text-white/60 resize-none min-h-[2.5rem] transition-all duration-200 ${
+                promptError ? 'border-red-500 border' : ''
+              }`}
+              placeholder="Describe Your Scene"
+              disabled={isLoading}
+              value={currentPrompt}
+              onChange={e => handlePromptChange(e.target.value)}
+              onBlur={() => setIsEditingPrompt(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  setIsEditingPrompt(false);
+                }
+                if (e.key === 'Escape') {
+                  setIsEditingPrompt(false);
+                }
+              }}
+              rows={1}
+              autoFocus
+              style={{
+                overflow: 'hidden',
+                resize: 'none',
+              }}
+              onInput={(e) => {
+                // Auto-resize textarea
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
+            />
+            <div className="flex justify-between items-center mt-1 px-1">
+              {promptError && (
+                <span className="text-red-400 text-xs">{promptError}</span>
+              )}
+              <span className={`text-xs ml-auto mr-7 ${
+                currentPrompt.length > 500 ? 'text-red-400' : 
+                currentPrompt.length > 450 ? 'text-yellow-400' : 'text-neutral-400'
+              }`}>
+                {currentPrompt.length}/500
+              </span>
+            </div>
+          </div>
         ) : (
           <div 
             className="flex w-full max-w-[25rem] h-auto px-3 py-2 text-sm text-white/80 cursor-pointer hover:text-white/90 transition-colors duration-200 min-h-[2.5rem] items-center rounded-lg hover:bg-white/5"
             onClick={handleEditPrompt}
           >
             <span className="line-clamp-3 break-words ">
-              {(promptKey && formData[promptKey]) ? formData[promptKey] as string : 'Describe Your Scene'}
+              {currentPrompt || 'Describe Your Scene'}
             </span>
           </div>
         )}
@@ -358,7 +406,7 @@ export default function ModelForm({ model, onGenerate, isLoading }: ModelFormPro
           <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#4F41D5] via-[#915EDA] to-[#DC683E]">
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !isPromptValid}
               className="flex text-white/90 items-center px-5 py-2 bg-[#0f151c] rounded-[calc(0.5rem-1px)] hover:bg-[#4179b2] transition-colors duration-200 font-medium disabled:opacity-50 max-w-[120px]"
             >
               {isLoading ? (
@@ -381,4 +429,4 @@ export default function ModelForm({ model, onGenerate, isLoading }: ModelFormPro
 
     </form>
   );
-}
+} 
